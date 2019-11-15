@@ -1,25 +1,25 @@
 //////////////////////////////////ARMAS/////////////////////////////////
 
 class Arma{
-	const calibre
-	const potenciaDestructiva
+	const calibre = 10 //valor arbitrario
+	const potenciaDestructiva = 20 //valor arbitrario
+	const property esRuidosa = true
 	
-	method poderOfencivo(){
+	method poderOfencivoArma(){
 		return 2 * calibre + potenciaDestructiva
 	}
-	
-	//ruidosas o silenciosas?
 	
 }
 
 /////////////////////////////SOBREVIVIENTES////////////////////////////////////
+class AtaqueException inherits Exception { }
 
 class Sobreviviente{
-	var property resistencia = 40
-	var property carisma = 1
-	var property estado	//ver tema tipos
-	const property armas = new List() //poner corchetes //VER SI ES UTIL EL PROPERTY
-	var poderBase = 1
+	var property resistencia = 50 //valor arbitrario
+	var property carisma = 50 //valor arbitrario
+	var property estado
+	const property armas = []
+	const poderBase = 50 //valor arbitrario
 	
 	method puedeAtacar(){
 		return resistencia > 12
@@ -28,9 +28,9 @@ class Sobreviviente{
 	method atacar(caminante){
 		if(self.puedeAtacar()){
 			resistencia -= 2
-			estado.efectoAtacar(self)
+			estado.efectoAdicionalAlAtacar(self)
 		}else{
-			//ataqueException = // implementar
+			throw new AtaqueException( message = "No es posible atacar, resistencia insuficiente")
 		}
 	}
 	
@@ -39,15 +39,19 @@ class Sobreviviente{
 	}
 	
 	method poderOfensivo(){
-		return armas.anyOne().poderOfensivo() + self.poder()
+		return armas.anyOne().poderOfencivoArma() + self.poder()
+	}
+	
+	method consumirGuarnicionCuradora(){
+		estado.efectoComer(self)
 	}
 }
 
-////////////////////////////////////ESTADOS//////////////////////////////////
+////////////////////////////////ESTADOS de los sobrevivientes/////////////////////////
 
 object saludable{
 	
-	method efectoAtacar(sobreviviente){
+	method efectoAdicionalAlAtacar(sobreviviente){
 		//no hace nada
 	}
 	
@@ -59,8 +63,8 @@ object saludable{
 
 object arrebatado{
 	
-	method efectoAtacar(sobreviviente){
-		sobreviviente.carisma(sobreviviente.carisma()-2)
+	method efectoAdicionalAlAtacar(sobreviviente){
+		sobreviviente.carisma(sobreviviente.carisma() + 1)
 	}
 	
 	method efectoComer(sobreviviente){
@@ -73,14 +77,13 @@ class Infectado{
 	
 	var ataquesRealizados = 0 
 	
-	method efectoAtacar(sobreviviente){
+	method efectoAdicionalAlAtacar(sobreviviente){
 		sobreviviente.resistencia(sobreviviente.resistencia() - 3)
 		ataquesRealizados += 1
 		
 		if(ataquesRealizados > 5){
-			sobreviviente.desmayarDelDolor()
+			sobreviviente.estado(desmayado)
 		}
-		
 	}
 	
 	method efectoComer(sobreviviente){
@@ -96,7 +99,7 @@ class Infectado{
 
 object desmayado{
 	
-	method efectoAtacar(sobreviviente){
+	method efectoAdicionalAlAtacar(sobreviviente){
 		//no hace nada
 	}
 	
@@ -111,7 +114,7 @@ class Predador inherits Sobreviviente{
 	const caminantesEsclavizados = #{}
 	
 	method intentarEsclavizarCaminate(caminante){
-		if(caminante.estaDevil()){
+		if(caminante.estaDebil()){
 			caminantesEsclavizados.add(caminante)
 		}
 	}
@@ -122,18 +125,18 @@ class Predador inherits Sobreviviente{
 	}
 	
 	override method poderOfensivo(){
-		var poderOfensivoBase = super() / 2
-		poderOfensivoBase += caminantesEsclavizados.map({caminante => caminante.poderCorrosivo()}).sum()
-		return poderOfensivoBase
+		var poderOfensivoPredador = super() / 2
+		poderOfensivoPredador += caminantesEsclavizados.map({caminante => caminante.poderCorrosivo()}).sum()
+		return poderOfensivoPredador
 	}
 }
 
 ///////////////////////////////////CAMINANTES///////////////////////////////////
 
 class Caminante{
-	var sedDeSangre = 45
-	var estaSomnoliento = true
-	var cantidadDientes = 2
+	var sedDeSangre = 30 //valor arbitrario
+	var estaSomnoliento = true	//valor arbitrario
+	var cantidadDientes = 12 //valor arbitrario
 	
 	method poderCorrosivo() = 2 * sedDeSangre + cantidadDientes
 	
@@ -144,9 +147,11 @@ class Caminante{
 }
 
 ////////////////////////////////GRUPOS////////////////////////////////
+class AtaqueLugarException inherits Exception { }
 
 class Grupo{
-	const integrantes = #{}
+	const property integrantes = #{}
+	var posicionActual
 	
 	method lider(){
 		return integrantes.max({sobreviviente => sobreviviente.carisma()}) 
@@ -158,16 +163,29 @@ class Grupo{
 	}
 	
 	method puedeTomarLugar(unLugar){
-		return self.poderOfensivo() > unLugar.poderCorrosivo()
+		return self.poderOfensivo() > unLugar.poderCorrosivoTotal()
 	}
 	
 	method tomarLugar(unLugar){
-		if(self.puedeTomarLugar(unLugar) && unLugar.complejidadExtra()){ //hay una mejor solucion en foto
+		if(self.puedeTomarLugar(unLugar) && unLugar.complejidadExtra(self)){ //hay una mejor solucion en foto
 		// pa que este metodo esté en el LUGAR en ves de en el GRUPO
-			//implementar
+			posicionActual = unLugar
+			posicionActual.caminantes().forEach({caminante => self.integrantes().anyOne().atacar(caminante)})
+			posicionActual.beneficioAlTomarLugar(self)
 		}else{
-			//tomaDeLugarExcepcion //IMPLEMENTAR	
+			integrantes.remove(self.miembroMasDevil())
+			var infeccion = new Infectado()
+			self.integrantesJodidos().forEach({integrante => integrante.estado(infeccion)})	//arreglar
+			throw new AtaqueLugarException( message = "No es posible tomar el lugar")
 		}
+	}
+	
+	method integrantesJodidos(){
+		return integrantes.filter({integrante => integrante.resistencia() < 40})
+	}
+	
+	method miembroMasDevil(){
+		return integrantes.min({sobreviviente => sobreviviente.poderOfensivo()})
 	}
 }
 
@@ -176,39 +194,49 @@ class Grupo{
 class Lugar{
 	const caminantes = #{}
 	
-	method poderCorrosivo(){
+	method caminantes(){
+		return caminantes
+	}
+	
+	method poderCorrosivoTotal(){
 		return caminantes.map({caminante => caminante.poderCorrosivo()}).sum()
 	}
 }
 
 class Prision inherits Lugar{
-	const cantidadPabellones
+	const cantidadPabellones = 20 //valor arbitrario
+	const armasPrision = #{}
 	
-	method complejidadExtra(){
-		
+	method complejidadExtra(unGrupo){
+		return unGrupo.poderOfensivo() > (cantidadPabellones * 2)
 	}
 	
-	method beneficios(){
-		
+	method beneficioAlTomarLugar(unGrupo){
+		unGrupo.miembroMasDevil().armas().addAll(armasPrision)
 	}
 }
 
 class Granja inherits Lugar{
-	method complejidadExtra(){
-		
+	method complejidadExtra(unGrupo){
+		return true // no tienen exigencias extras
 	}
 	
-	method beneficios(){
-		
+	method beneficioAlTomarLugar(unGrupo){
+		unGrupo.integrantes().forEach{integrante => integrante.consumirGuarnicionCuradora()}
 	}
 }
 
 class Bosque inherits Lugar{
-	method complejidadExtra(){
-		
+	var tieneNiebla = true
+	
+	method complejidadExtra(unGrupo){
+		return unGrupo.integrantes().filter{integrante => integrante.puedeAtacar()}.all{atacante => atacante.armas().all({arma => arma.esRuidosa().negate()})}
 	}
 	
-	method beneficios(){
-		
+	method beneficioAlTomarLugar(unGrupo){
+		if(tieneNiebla){
+			var integranteDesafortunado = unGrupo.integrantes().anyOne()
+			integranteDesafortunado.armas().remove(integranteDesafortunado.armas().anyOne())
+		}
 	}
 }
