@@ -30,7 +30,9 @@ class Sobreviviente{
 			resistencia -= 2
 			estado.efectoAdicionalAlAtacar(self)
 		}else{
-			throw new AtaqueException( message = "No es posible atacar, resistencia insuficiente")
+			throw new AtaqueException( 
+				message = "No es posible atacar, resistencia insuficiente"
+			)
 		}
 	}
 	
@@ -113,7 +115,7 @@ object desmayado{
 class Predador inherits Sobreviviente{
 	const caminantesEsclavizados = #{}
 	
-	method intentarEsclavizarCaminate(caminante){
+	method intentarEsclavizar(caminante){
 		if(caminante.estaDebil()){
 			caminantesEsclavizados.add(caminante)
 		}
@@ -121,12 +123,14 @@ class Predador inherits Sobreviviente{
 	
 	override method atacar(caminante){
 		super(caminante)
-		self.intentarEsclavizarCaminate(caminante)
+		self.intentarEsclavizar(caminante)
 	}
 	
 	override method poderOfensivo(){
 		var poderOfensivoPredador = super() / 2
-		poderOfensivoPredador += caminantesEsclavizados.map({caminante => caminante.poderCorrosivo()}).sum()
+		poderOfensivoPredador += caminantesEsclavizados.map(
+			{caminante => caminante.poderCorrosivo()}
+		).sum()
 		return poderOfensivoPredador
 	}
 }
@@ -147,11 +151,10 @@ class Caminante{
 }
 
 ////////////////////////////////GRUPOS////////////////////////////////
-class AtaqueLugarException inherits Exception { }
 
 class Grupo{
 	const property integrantes = #{}
-	var posicionActual
+	var property posicionActual
 	
 	method lider(){
 		return integrantes.max({sobreviviente => sobreviviente.carisma()}) 
@@ -159,25 +162,17 @@ class Grupo{
 	}
 	
 	method poderOfensivo(){
-		return self.lider().carisma() * integrantes.map({sobreviviente => sobreviviente.poderOfensivo()}).sum()
+		return self.lider().carisma() * integrantes.map(
+			{sobreviviente => sobreviviente.poderOfensivo()}
+		).sum()
 	}
 	
-	method puedeTomarLugar(unLugar){
+	method puedeTomar(unLugar){
 		return self.poderOfensivo() > unLugar.poderCorrosivoTotal()
 	}
 	
-	method tomarLugar(unLugar){
-		if(self.puedeTomarLugar(unLugar) && unLugar.complejidadExtra(self)){ //hay una mejor solucion en foto
-		// pa que este metodo esté en el LUGAR en ves de en el GRUPO
-			posicionActual = unLugar
-			posicionActual.caminantes().forEach({caminante => self.integrantes().anyOne().atacar(caminante)})
-			posicionActual.beneficioAlTomarLugar(self)
-		}else{
-			integrantes.remove(self.miembroMasDevil())
-			var infeccion = new Infectado()
-			self.integrantesJodidos().forEach({integrante => integrante.estado(infeccion)})	//arreglar
-			throw new AtaqueLugarException( message = "No es posible tomar el lugar")
-		}
+	method atacantes(){
+		return integrantes.filter{integrante => integrante.puedeAtacar()}
 	}
 	
 	method integrantesJodidos(){
@@ -194,8 +189,29 @@ class Grupo{
 class Lugar{
 	const caminantes = #{}
 	
+	method puedeSerTomadoEspecifico(unGrupo)
+	
+	method beneficioAlTomarLugar(unGrupo)
+	
+	method tomarLugarPor(unGrupo){
+		if(unGrupo.puedeTomar(self) && self.puedeSerTomadoEspecifico(unGrupo)){ 
+			unGrupo.posicionActual(self)
+			caminantes.forEach(
+				{caminante => unGrupo.integrantes().anyOne().atacar(caminante)}
+			)
+			self.beneficioAlTomarLugar(unGrupo)
+		}else{
+			unGrupo.integrantes().remove(unGrupo.miembroMasDevil())
+			var infeccion = new Infectado()
+			unGrupo.integrantesJodidos().forEach(
+				{integrante => integrante.estado(infeccion)}
+			)
+		}
+	}
+	
 	method caminantes(){
-		return caminantes
+		return caminantes// hago el getter porque me marca un warning si uso el property
+		//por la herencia
 	}
 	
 	method poderCorrosivoTotal(){
@@ -207,33 +223,37 @@ class Prision inherits Lugar{
 	const cantidadPabellones = 20 //valor arbitrario
 	const armasPrision = #{}
 	
-	method complejidadExtra(unGrupo){
+	override method puedeSerTomadoEspecifico(unGrupo){
 		return unGrupo.poderOfensivo() > (cantidadPabellones * 2)
 	}
 	
-	method beneficioAlTomarLugar(unGrupo){
+	override method beneficioAlTomarLugar(unGrupo){
 		unGrupo.miembroMasDevil().armas().addAll(armasPrision)
 	}
 }
 
 class Granja inherits Lugar{
-	method complejidadExtra(unGrupo){
+	override method puedeSerTomadoEspecifico(unGrupo){
 		return true // no tienen exigencias extras
 	}
 	
-	method beneficioAlTomarLugar(unGrupo){
-		unGrupo.integrantes().forEach{integrante => integrante.consumirGuarnicionCuradora()}
+	override method beneficioAlTomarLugar(unGrupo){
+		unGrupo.integrantes().forEach{
+			integrante => integrante.consumirGuarnicionCuradora()
+		}
 	}
 }
 
 class Bosque inherits Lugar{
 	var tieneNiebla = true
 	
-	method complejidadExtra(unGrupo){
-		return unGrupo.integrantes().filter{integrante => integrante.puedeAtacar()}.all{atacante => atacante.armas().all({arma => arma.esRuidosa().negate()})}
+	override method puedeSerTomadoEspecifico(unGrupo){
+		return unGrupo.atacantes().all{
+			atacante => atacante.armas().all({arma => arma.esRuidosa().negate()})
+		}
 	}
 	
-	method beneficioAlTomarLugar(unGrupo){
+	override method beneficioAlTomarLugar(unGrupo){
 		if(tieneNiebla){
 			var integranteDesafortunado = unGrupo.integrantes().anyOne()
 			integranteDesafortunado.armas().remove(integranteDesafortunado.armas().anyOne())
