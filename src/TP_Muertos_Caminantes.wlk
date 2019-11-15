@@ -3,7 +3,7 @@
 class Arma{
 	const calibre = 10 //valor arbitrario
 	const potenciaDestructiva = 20 //valor arbitrario
-	const property esRuidosa = true
+	const property esRuidosa = true // se puede cambiar en la instanciacion
 	
 	method poderOfencivoArma(){
 		return 2 * calibre + potenciaDestructiva
@@ -28,10 +28,11 @@ class Sobreviviente{
 	method atacar(caminante){
 		if(self.puedeAtacar()){
 			resistencia -= 2
-			estado.efectoAdicionalAlAtacar(self)
+			estado.afectarAlAtacar(self)
 		}else{
 			throw new AtaqueException( 
-				message = "No es posible atacar, resistencia insuficiente"
+				message = "No es posible atacar, 
+					es probable que la resistencia del sobreviviente sea insuficiente"
 			)
 		}
 	}
@@ -45,7 +46,7 @@ class Sobreviviente{
 	}
 	
 	method consumirGuarnicionCuradora(){
-		estado.efectoComer(self)
+		estado.afectarAlComer(self)
 	}
 }
 
@@ -53,11 +54,11 @@ class Sobreviviente{
 
 object saludable{
 	
-	method efectoAdicionalAlAtacar(sobreviviente){
+	method afectarAlAtacar(sobreviviente){
 		//no hace nada
 	}
 	
-	method efectoComer(sobreviviente){
+	method afectarAlComer(sobreviviente){
 		//no hace nada
 	}
 	
@@ -65,11 +66,11 @@ object saludable{
 
 object arrebatado{
 	
-	method efectoAdicionalAlAtacar(sobreviviente){
+	method afectarAlAtacar(sobreviviente){
 		sobreviviente.carisma(sobreviviente.carisma() + 1)
 	}
 	
-	method efectoComer(sobreviviente){
+	method afectarAlComer(sobreviviente){
 		sobreviviente.resistencia(sobreviviente.resistencia() + 50)
 		sobreviviente.carisma(sobreviviente.carisma() + 20)
 	}
@@ -79,7 +80,7 @@ class Infectado{
 	
 	var ataquesRealizados = 0 
 	
-	method efectoAdicionalAlAtacar(sobreviviente){
+	method afectarAlAtacar(sobreviviente){
 		sobreviviente.resistencia(sobreviviente.resistencia() - 3)
 		ataquesRealizados += 1
 		
@@ -88,7 +89,7 @@ class Infectado{
 		}
 	}
 	
-	method efectoComer(sobreviviente){
+	method afectarAlComer(sobreviviente){
 		sobreviviente.resistencia(sobreviviente.resistencia() + 40)
 		
 		if(ataquesRealizados > 3){
@@ -101,11 +102,11 @@ class Infectado{
 
 object desmayado{
 	
-	method efectoAdicionalAlAtacar(sobreviviente){
+	method afectarAlAtacar(sobreviviente){
 		//no hace nada
 	}
 	
-	method efectoComer(sobreviviente){
+	method afectarAlComer(sobreviviente){
 		sobreviviente.estado(saludable) 
 	}
 }
@@ -167,8 +168,14 @@ class Grupo{
 		).sum()
 	}
 	
-	method puedeTomar(unLugar){
-		return self.poderOfensivo() > unLugar.poderCorrosivoTotal()
+	method intentarTomarLugar(unLugar){
+		unLugar.esAtacadoPor(self)
+	}
+	
+	method atacarCaminantes(caminantes){
+		caminantes.forEach(
+				{caminante => integrantes.anyOne().atacar(caminante)}
+			)
 	}
 	
 	method atacantes(){
@@ -189,30 +196,29 @@ class Grupo{
 class Lugar{
 	const caminantes = #{}
 	
-	method puedeSerTomadoEspecifico(unGrupo)
-	
-	method beneficioAlTomarLugar(unGrupo)
-	
-	method tomarLugarPor(unGrupo){
-		if(unGrupo.puedeTomar(self) && self.puedeSerTomadoEspecifico(unGrupo)){ 
-			unGrupo.posicionActual(self)
-			caminantes.forEach(
-				{caminante => unGrupo.integrantes().anyOne().atacar(caminante)}
-			)
-			self.beneficioAlTomarLugar(unGrupo)
+	method esAtacadoPor(unGrupo){
+		if(self.puedeSerTomadoPor(unGrupo)){ 
+			unGrupo.posicionActual(self)	//el grupo se mueve hasta el lugar
+			unGrupo.atacarCaminantes(caminantes)
+			self.darRecompensaA(unGrupo)
 		}else{
 			unGrupo.integrantes().remove(unGrupo.miembroMasDevil())
-			var infeccion = new Infectado()
-			unGrupo.integrantesJodidos().forEach(
-				{integrante => integrante.estado(infeccion)}
-			)
+			var estado = new Infectado()
+			unGrupo.integrantesJodidos().forEach({integrante => integrante.estado(estado)})
 		}
 	}
 	
-	method caminantes(){
-		return caminantes// hago el getter porque me marca un warning si uso el property
-		//por la herencia
+	method puedeSerTomadoPor(unGrupo){
+		return self.puedeSerTomadoGeneral(unGrupo) && self.puedeSerTomadoEspecifico(unGrupo)
 	}
+	
+	method puedeSerTomadoGeneral(unGrupo){
+		return unGrupo.poderOfensivo() > self.poderCorrosivoTotal()
+	}
+	
+	method puedeSerTomadoEspecifico(unGrupo)
+	
+	method darRecompensaA(unGrupo)
 	
 	method poderCorrosivoTotal(){
 		return caminantes.map({caminante => caminante.poderCorrosivo()}).sum()
@@ -227,7 +233,7 @@ class Prision inherits Lugar{
 		return unGrupo.poderOfensivo() > (cantidadPabellones * 2)
 	}
 	
-	override method beneficioAlTomarLugar(unGrupo){
+	override method darRecompensaA(unGrupo){
 		unGrupo.miembroMasDevil().armas().addAll(armasPrision)
 	}
 }
@@ -237,7 +243,7 @@ class Granja inherits Lugar{
 		return true // no tienen exigencias extras
 	}
 	
-	override method beneficioAlTomarLugar(unGrupo){
+	override method darRecompensaA(unGrupo){
 		unGrupo.integrantes().forEach{
 			integrante => integrante.consumirGuarnicionCuradora()
 		}
@@ -245,7 +251,8 @@ class Granja inherits Lugar{
 }
 
 class Bosque inherits Lugar{
-	var tieneNiebla = true
+	var tieneNiebla = true	//por defecto tiene niebla 
+	//esto siempre se puede cambiar en la instanciacion del objeto
 	
 	override method puedeSerTomadoEspecifico(unGrupo){
 		return unGrupo.atacantes().all{
@@ -253,7 +260,7 @@ class Bosque inherits Lugar{
 		}
 	}
 	
-	override method beneficioAlTomarLugar(unGrupo){
+	override method darRecompensaA(unGrupo){
 		if(tieneNiebla){
 			var integranteDesafortunado = unGrupo.integrantes().anyOne()
 			integranteDesafortunado.armas().remove(integranteDesafortunado.armas().anyOne())
